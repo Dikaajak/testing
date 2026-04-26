@@ -157,39 +157,46 @@
         const btnBack = document.getElementById('btnBack');
 
         async function updateSaldoUser(amount) {
-            const user = auth.currentUser;
-            if (!user) return;
+    const user = auth.currentUser;
+    if (!user) return;
 
-            const userRef = db.ref('users/' + user.uid);
-            try {
-                const snapshot = await userRef.once('value');
-                const data = snapshot.val() || {};
-                
-                const currentSaldo = parseInt(data.saldo || 0);
-                const currentTotalDepo = parseInt(data.totalDeposit || 0);
-                const currentCountDepo = parseInt(data.jumlahDeposit || 0);
-                const addedAmount = parseInt(amount);
+    const userRef = db.ref('users/' + user.uid);
+    const depositHistoryRef = db.ref('deposits/' + user.uid).push(); 
+    
+    try {
+        const snapshot = await userRef.once('value');
+        const data = snapshot.val() || {};
+        
+        const currentSaldo = parseInt(data.saldo || 0);
+        const currentTotalDepo = parseInt(data.total_deposit || 0); 
+        const addedAmount = parseInt(amount);
 
-                await userRef.update({
-                    saldo: currentSaldo + addedAmount,
-                    totalDeposit: currentTotalDepo + addedAmount,
-                    jumlahDeposit: currentCountDepo + 1
-                });
+        await userRef.update({
+            saldo: currentSaldo + addedAmount,
+            total_deposit: currentTotalDepo + addedAmount 
+        });
 
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Pembayaran Berhasil',
-                    text: 'Saldo Rp ' + addedAmount.toLocaleString() + ' telah ditambahkan.',
-                    background: '#00222d',
-                    color: '#fff'
-                }).then(() => {
-                    window.location.href = '../dashboard.html';
-                });
-            } catch (err) {
-                console.error("Gagal update saldo:", err);
-            }
+        await depositHistoryRef.set({
+            nominal: addedAmount,
+            status: 'SUKSES',
+            date: new Date().toISOString(),
+            ref: document.getElementById('detailRef').innerText
+        });
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Pembayaran Berhasil',
+            text: 'Saldo Rp ' + addedAmount.toLocaleString() + ' telah ditambahkan.',
+            background: '#00222d',
+            color: '#fff'
+        }).then(() => {
+            window.location.href = '../dashboard.html';
+        });
+    } catch (err) {
+        console.error("Gagal update saldo:", err);
+    }
         }
-
+          
         async function checkStatus(ref, amount) {
             try {
                 const apiReq = await fetch('/api/deposit', {
