@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rooxpedia - Detail</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Rajdhani', sans-serif; }
+        body { background: #003344; color: #fff; padding: 20px; }
+        .header { display: flex; align-items: center; margin-bottom: 20px; }
+        .header i { font-size: 20px; margin-right: 15px; cursor: pointer; color: #00acc1; }
+        .card { background: rgba(0, 34, 45, 0.8); border: 1px solid #ff8800; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
+        .op-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .op-item { background: rgba(255,255,255,0.05); border: 1px solid rgba(0,172,193,0.2); padding: 10px; border-radius: 10px; text-align: center; cursor: pointer; }
+        .op-item.active { border-color: #ff8800; background: rgba(255,136,0,0.1); }
+        .op-item img { width: 30px; height: 30px; border-radius: 50%; }
+        .btn { width: 100%; padding: 15px; background: #ff8800; border: none; border-radius: 12px; color: #fff; font-weight: 700; margin-top: 30px; cursor: pointer; display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <i class="fas fa-chevron-left" onclick="window.history.back()"></i>
+        <h3>DETAIL ORDER</h3>
+    </div>
+    <div class="card">
+        <div style="display: flex; gap: 15px;">
+            <img id="appImg" style="width: 50px; height: 50px; border-radius: 10px;">
+            <div><h2 id="appName">-</h2><p id="countryName">-</p></div>
+        </div>
+        <span id="appPrice" style="color:#00ff88; font-size:20px; font-weight:700; margin-top:10px; display:block;">-</span>
+    </div>
+    <div id="opList" class="op-grid"></div>
+    <button id="btnBuy" class="btn">BELI SEKARANG</button>
+
+    <script src="config.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC_5LQ6U3DtMf4STbDjLymazm8I_zySbSw",
+            authDomain: "myproject-485415.firebaseapp.com",
+            databaseURL: "https://myproject-485415-default-rtdb.firebaseio.com",
+            projectId: "myproject-485415",
+            storageBucket: "myproject-485415.firebasestorage.app",
+            messagingSenderId: "450623193142",
+            appId: "1:450623193142:web:d7a9caf66e1dff8d495897"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const auth = firebase.auth();
+
+        const p = new URLSearchParams(window.location.search);
+        const sName = p.get('name');
+        const cName = p.get('country');
+        const price = parseInt(p.get('price'));
+        const provId = p.get('provider_id');
+        const numId = p.get('number_id');
+
+        document.getElementById('appName').innerText = sName;
+        document.getElementById('countryName').innerText = cName;
+        document.getElementById('appPrice').innerText = `Rp ${price.toLocaleString()}`;
+        document.getElementById('appImg').src = p.get('app_img');
+
+        let selOp = null;
+
+        async function getOps() {
+            try {
+                const res = await axios.get(`https://www.rumahotp.io/api/v2/operators?country=${cName}&provider_id=${provId}`, {
+                    headers: { 'x-apikey': CONFIG_OTP.API_KEY_OTP }
+                });
+                if(res.data.success) {
+                    const cont = document.getElementById('opList');
+                    res.data.data.forEach(o => {
+                        const div = document.createElement('div');
+                        div.className = 'op-item';
+                        div.onclick = () => {
+                            selOp = o;
+                            document.querySelectorAll('.op-item').forEach(x => x.classList.remove('active'));
+                            div.classList.add('active');
+                            document.getElementById('btnBuy').style.display = 'block';
+                        };
+                        div.innerHTML = `<img src="${o.image}"><span>${o.name}</span>`;
+                        cont.appendChild(div);
+                    });
+                }
+            } catch(e) {}
+        }
+
+        document.getElementById('btnBuy').onclick = async () => {
+            const u = auth.currentUser;
+            if(!u || !selOp) return;
+
+            Swal.fire({ title: 'Mencoba mengambil nomor...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                const uRef = db.ref(`users/${u.uid}`);
+                const snap = await uRef.once('value');
+                const sal = snap.val().saldo || 0;
+
+                if(sal < price) return Swal.fire('Gagal', 'Saldo kurang', 'error');
+
+                const res = await axios.get(`https://www.rumahotp.io/api/v2/orders?number_id=${numId}&provider_id=${provId}&operator_id=${selOp.id}`, {
+                    headers: { 'x-apikey': CONFIG_OTP.API_KEY_OTP }
+                });
+
+                if(res.data.success) {
+                    const d = res.data.data;
+                    await uRef.update({ saldo: sal - price });
+                    await db.ref(`orders/${u.uid}`).push({
+                        order_id: d.order_id,
+                        nomor: d.phone_number,
+                        aplikasi: sName,
+                        negara: cName,
+                        harga: price,
+                        status: 'PENDING',
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                    });
+                    Swal.fire('Berhasil', 'Cek riwayat!', 'success').then(() => window.location.href = 'riwayat.html');
+                } else {
+                    Swal.fire('Provider Menolak', res.data.msg || 'Stok tidak valid', 'error');
+                }
+            } catch(e) {
+                Swal.fire('Sistem Error', 'Cek API Key atau koneksi', 'error');
+            }
+        };
+        getOps();
+    </script>
+</body>
+</html>
